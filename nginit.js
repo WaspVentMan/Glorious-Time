@@ -80,3 +80,5 @@ function onMedalUnlocked(medal)
 }
 
 //NGIO.UnlockMedal(medal_id, onMedalUnlocked);
+
+let offlineStart = 0

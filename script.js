@@ -1,4 +1,4 @@
-let player = {
+let trueplayer = {
     "time": 0,
     "tick": Date.now(),
     "speed": 1,
@@ -44,6 +44,8 @@ let player = {
     }
 }
 
+let player = null
+
 let costs = {
     "auto": [
         {"cost": 1},
@@ -68,55 +70,75 @@ let costs = {
     ],
 }
 
-let saveData = player
+let saveData = null
 let slowdown = 0
 
-try{
+try {
     saveData = JSON.parse(localStorage.getItem("gloretime").replaceAll("null", "0"))
 } catch {
     console.log("no save detected")
 }
 
-if (saveData != null){
-    if (saveData.upgrade.length != player.upgrade.length){
+let gameloop = null
+let slowloop = null
+
+function init(){
+    player = {}
+    for (let x = 0; x < Object.keys(trueplayer).length; x++){
+        if (player[Object.keys(trueplayer)[x]] == null){
+            player[Object.keys(trueplayer)[x]] = trueplayer[Object.keys(trueplayer)[x]]
+        }
+    }
+
+    player.freezeStart = Date.now()
+    player.cogs = trueplayer.cogs
+
+    if (saveData != null){
+        for (let x = 0; x < Object.keys(saveData).length; x++){
+            player[Object.keys(saveData)[x]] = saveData[Object.keys(saveData)[x]]
+        }
+
+        if ((Date.now() - player.tick) > 10000){
+            player.freezeStart = Date.now() - player.tick
+        }
+    }
+
+
+    if (player.fastestFreeze != 1e100){
+        document.querySelector(".eonUp").style.display = "block"
+        document.querySelector(".automation").style.display = "block"
+        document.querySelector(".timeDispCont").style.gridTemplateColumns = "1fr 1fr"
+        document.querySelector(".timeDispEon").style.display = "grid"
+    } else {
+        document.querySelector(".timeDispCont").style.gridTemplateColumns = "1fr"
+        document.querySelector(".timeDispEon").style.display = "none"
+    }
+
+    if (player.freezeStart == 0){
+        player.freezeStart = (player.tick - Date.now())
+    }
+
+    if (player.fastestFreeze == 1e100){
+        document.querySelector(".freezeFast").style.display = "none"
+    } else if (player.fastestFreeze >= 1000) {
+        document.querySelector(".fastFreeze").innerHTML = timeify(player.fastestFreeze/1000).toLowerCase()
+    } else {
+        document.querySelector(".fastFreeze").innerHTML = player.fastestFreeze + "ms"
+    }
+
+    if (player.time == 0){
         for (let x = 0; x < player.upgrade.length; x++){
-            if (saveData.upgrade[x] == undefined){
-                saveData.upgrade.push(player.upgrade[x])
+            if (player.upgrade[x].unlocked){
+                player.time += [60, 3600, 86400, 604800, 2629800, 31557600, 315576000, 3155760000][x]
             }
         }
     }
 
-    for (let x = 0; x < Object.keys(saveData).length; x++){
-        player[Object.keys(saveData)[x]] = saveData[Object.keys(saveData)[x]]
-    }
-}
+    document.querySelector(".eonPrestige").style.display = "none"
 
-if (player.fastestFreeze != 1e100){
-    document.querySelector(".eonUp").style.display = "block"
-    document.querySelector(".automation").style.display = "block"
-} else {
-    document.querySelector(".timeDispCont").style.gridTemplateColumns = "1fr"
-    document.querySelector(".timeDispEon").style.display = "none"
-}
-
-if (player.freezeStart == 0){
-    player.freezeStart = Date.now()
-}
-
-if (player.fastestFreeze == 1e100){
-    document.querySelector(".freezeFast").style.display = "none"
-} else if (player.fastestFreeze >= 1000) {
-    document.querySelector(".fastFreeze").innerHTML = timeify(player.fastestFreeze/1000).toLowerCase()
-} else {
-    document.querySelector(".fastFreeze").innerHTML = player.fastestFreeze + "ms"
-}
-
-if (player.time == 0){
-    for (let x = 0; x < player.upgrade.length; x++){
-        if (player.upgrade[x].unlocked){
-            player.time += [60, 3600, 86400, 604800, 2629800, 31557600, 315576000, 3155760000][x]
-        }
-    }
+    gameloop = setInterval(mainGameloop, 10)
+    slowloop = setInterval(slowGameloop, 100)
+    slowGameloop()
 }
 
 function purchase(cog){
@@ -345,29 +367,44 @@ function rendertime(){
 
 function prestige(value){
     clearInterval(gameloop)
-    clearInterval(slowloop)
+    //clearInterval(slowloop)
 
-    localStorage.setItem('gloretime',
-        JSON.stringify(
-            {
-                'bigFreeze': player.bigFreeze + qwertyMult(value),
-                'auto': player.auto,
-                'upgrade': player.upgrade,
-                'settings': player.settings,
-                'achievements': player.achievements,
-                'fastestFreeze': player.fastestFreeze
-            }
-        )
-    )
+    saveData = {
+        'bigFreeze': player.bigFreeze + qwertyMult(value),
+        'auto': player.auto,
+        'tick': player.tick,
+        'upgrade': player.upgrade,
+        'settings': player.settings,
+        'achievements': player.achievements,
+        'fastestFreeze': player.fastestFreeze
+    }
 
-    location.reload()
+    init()
 }
 
-let gameloop = setInterval(async function(){
+async function mainGameloop(){
     let d = (Date.now() - player.tick)/1000
-    player.tick = Date.now()
+    if (d <= 10000){
+        player.tick = Date.now()
+        offlineStart = 0
+    } else if (offlineStart == 0){
+        offlineStart = player.tick
+    }
 
     slowdown = (((player.time+1)/31557600000000000)**6)
+
+    if (d > 10000){
+        console.log("offline calc")
+        d = 10000
+        player.tick += d
+
+        document.querySelector(".offlineZone").style.display = "block"
+        document.querySelector(".offlineTime").textContent = timeify((Date.now() - player.tick)/1000)
+        document.querySelector(".offlinebar").max = Date.now() - offlineStart
+        document.querySelector(".offlinebar").value = player.tick - offlineStart
+    } else {
+        document.querySelector(".offlineZone").style.display = "none"
+    }
 
     player.cogs[6].count += (player.cogs[7].count*player.cogs[7].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
     player.cogs[5].count += (player.cogs[6].count*player.cogs[6].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
@@ -378,22 +415,10 @@ let gameloop = setInterval(async function(){
     player.cogs[0].count += (player.cogs[1].count*player.cogs[1].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
     player.speed += (player.cogs[0].count*player.cogs[0].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
 
-    if (d > 10){
-        console.log("offline calc")
-        smallD = 10
-        for (let x = 0; x < d/10; x++){
-            if (Math.floor(player.time/(31557600000000000/2)) > 1 && player.fastestFreeze < 90000){
-                player.time = player.time + ((player.speed*smallD)/slowdown)
-            } else {
-                player.time += player.speed*smallD
-            }
-        }
+    if (Math.floor(player.time/(31557600000000000/2)) > 1 && player.fastestFreeze < 90000){
+        player.time += (player.speed*d)/slowdown
     } else {
-        if (Math.floor(player.time/(31557600000000000/2)) > 1 && player.fastestFreeze < 90000){
-            player.time += (player.speed*d)/slowdown
-        } else {
-            player.time += player.speed*d
-        }
+        player.time += player.speed*d
     }
 
     for (let x = 0; x < player.auto.length; x++){
@@ -424,10 +449,10 @@ let gameloop = setInterval(async function(){
         rendertime()
 
         document.querySelector(".eonPrestige").style.display = "block"
-        document.querySelector(".eonPrestige").innerHTML = `<h1>BIG FREEZE</h1><h2>Earn <b>${qwertyMult(1)}</b> Eon when you reset.</h2></div>`
+        document.querySelector(".eonPrestige").innerHTML = `<h1>BIG FREEZE</h1><h2>Earn <b class="eonReward">${qwertyMult(1)}</b> Eon when you reset.</h2></div>`
         clearInterval(gameloop); clearInterval(slowloop)
 
-        if (player.settings.autoEon){
+        if (player.settings.autoEon || d == 10000){
             prestige(1)
         }
 
@@ -435,9 +460,9 @@ let gameloop = setInterval(async function(){
     }
 
     localStorage.setItem("gloretime", JSON.stringify(player))
-}, 10)
+}
 
-let slowloop = setInterval(function(){
+function slowGameloop(){
     for (let x = 0; x < player.cogs.length; x++){
         if (player.cogs[x].count < 1000){
             document.querySelector(".cog" + (x+1) + "count").textContent = Math.floor(player.cogs[x].count) + "x" + Math.floor((player.cogs[x].mult*(1+Math.cbrt(player.bigFreeze)))*100)/100
@@ -525,4 +550,6 @@ let slowloop = setInterval(function(){
             }
         }
     } catch {}
-}, 100)
+}
+
+init()
