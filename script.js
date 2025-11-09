@@ -41,7 +41,9 @@ let trueplayer = {
         "performance": false,
         "renderer": false,
         "format": false
-    }
+    },
+    "lastVer": ()=>{if (!offline){return NGIO.version}else{return "unknown"}},
+    "completions": 0
 }
 
 let player = null
@@ -73,6 +75,9 @@ let costs = {
 let saveData = null
 let slowdown = 0
 
+let offlineStart = -1
+let offlineD = 0
+
 try {
     saveData = JSON.parse(localStorage.getItem("gloretime").replaceAll("null", "0"))
 } catch {
@@ -91,7 +96,7 @@ function init(){
     }
 
     player.freezeStart = Date.now()
-    player.cogs = trueplayer.cogs
+    player.cogs = Object.assign([], trueplayer.cogs)
 
     if (saveData != null){
         for (let x = 0; x < Object.keys(saveData).length; x++){
@@ -107,11 +112,10 @@ function init(){
     if (player.fastestFreeze != 1e100){
         document.querySelector(".eonUp").style.display = "block"
         document.querySelector(".automation").style.display = "block"
-        document.querySelector(".timeDispCont").style.gridTemplateColumns = "1fr 1fr"
-        document.querySelector(".timeDispEon").style.display = "grid"
+        document.querySelector(".timeEon").style.display = "block"
+        document.querySelector(".autoEon").style.display = "block"
     } else {
-        document.querySelector(".timeDispCont").style.gridTemplateColumns = "1fr"
-        document.querySelector(".timeDispEon").style.display = "none"
+        document.querySelector(".timeEon").style.display = "none"
     }
 
     if (player.freezeStart == 0){
@@ -168,7 +172,6 @@ function purchaseAuto(cog){
 
 function purchaseUpgrade(cog){
     if (cog == 8){
-        if (player.upgrade[8].level == costs.upgrade[8].cost.length-1){} else
         if (player.bigFreeze >= costs.upgrade[8].cost[player.upgrade[8].level]){
             player.bigFreeze -= costs.upgrade[8].cost[player.upgrade[8].level]
             player.upgrade[8].level += 1
@@ -197,16 +200,22 @@ function qwertyMult(value){
  * @returns string, 60 becomes 60S, 120 becomes 2M, etc
  */
 function timeify(time, prefix = ""){
-    const timeBounds = [1, 60, 3600, 86400, 604800, 2629800, 31557600, 315576000, 3155760000, 31557600000, 1.8e308]
-    const timeNames = ["S", "M", "H", "D", "W", "Mo", "Y", "De", "C", "Mi", "INFINITY"]
+    const timeBounds = [1, 60, 3600, 86400, 604800, 2629800, 31557600, 315576000, 3155760000, 31557600000, 1.8e308, 0]
+    const timeNames = ["s", "m", "h", "D", "W", "M", "Y", "De", "C", "Mi", "INFINITY"]
 
     let back = ""
 
     for (let x = 0; x < timeBounds.length; x++){
-        if (time < timeBounds[x+1]){
-            for (let y = 0; y < 5; y++){
+        if (time < timeBounds[x]){
+            if (x == 0){
+                return "0s"
+            }
+            for (let y = 0; y < 3; y++){
                 if (time != 0 && x-y >= 0 && Math.floor(time/timeBounds[x-y]) != 0){
                     back += " " + Math.floor(time/timeBounds[x-y]) + prefix + timeNames[x-y]
+                    if (time%timeBounds[x-y] >= 100 && x == 9){
+                        return back
+                    }
                     time -= time-(time%timeBounds[x-y])
                 }
             }
@@ -318,37 +327,8 @@ function rendertime(){
     if (1-(player.speed/3155760000000) > 0 || true){document.querySelector(".eoncentury").style.transform = "rotate(" + ((player.bigFreeze/3155760000*(360/10)) + 180)%360 + "deg)"}
     document.querySelector(".eonmillennia").style.transform = "rotate(" + ((player.bigFreeze/31557600000000000*360) + 180)%360 + "deg)"
 
-    let display = [".secDisp",".minDisp",".houDisp",".dayDisp",".weeDisp",".monDisp",".yeaDisp",".decDisp",".cenDisp",".milDisp",".eonDisp"]
-    let degredation = [1,60,3600,86400,604800,2629800,31557600,315576000,3155760000,31557600000, 31557600000000000]
-    for (let x = 0; x < display.length; x++){
-        if (Math.floor(player.time/degredation[x]) < 1000){
-            document.querySelector(display[x]).textContent = Math.floor(player.time/degredation[x])
-        } else {
-            document.querySelector(display[x]).textContent = Math.floor(player.time/degredation[x]).toExponential(2).replace("+", "")
-        }
-
-        if (display[x] == ".eonDisp"){
-            if (Math.floor(player.time/degredation[x]) < 10){
-                document.querySelector(display[x]).textContent = Math.floor(qwertyMult(player.time/degredation[x])*1e3)/1e3
-            } else if (Math.floor(player.time/degredation[x]) < 1000){
-                document.querySelector(display[x]).textContent = Math.floor(qwertyMult(player.time/degredation[x]))
-            } else {
-                document.querySelector(display[x]).textContent = Math.floor(qwertyMult(player.time/degredation[x])).toExponential(2).replace("+", "")
-            }
-        }
-    }
-
-    display = [".eonsecDisp",".eonminDisp",".eonhouDisp",".eondayDisp",".eonweeDisp",".eonmonDisp",".eonyeaDisp",".eondecDisp",".eoncenDisp",".eonmilDisp"]
-    degredation = [1,60,3600,86400,604800,2629800,31557600,315576000,3155760000,31557600000]
-    for (let x = 0; x < display.length; x++){
-        if (Math.floor(player.bigFreeze/degredation[x]) < 1000){
-            document.querySelector(display[x]).textContent = Math.floor(player.bigFreeze/degredation[x])
-        } else {
-            document.querySelector(display[x]).textContent = Math.floor(player.bigFreeze/degredation[x]).toExponential(2).replace("+", "")
-        }
-    }
-
-    document.querySelector(".eoneonDisp").textContent = 0//player.bigFreeze
+    document.querySelector(".time").textContent = "You have " + timeify(player.time) + " of time stored"
+    document.querySelector(".timeEon").textContent = "You have " + timeify(player.bigFreeze) + " of eon time stored"
     
     if (player.speed < 1000){
         document.querySelector(".timeDisp").textContent = Math.floor((player.speed-1)*10)/10
@@ -376,28 +356,47 @@ function prestige(value){
         'upgrade': player.upgrade,
         'settings': player.settings,
         'achievements': player.achievements,
-        'fastestFreeze': player.fastestFreeze
+        'fastestFreeze': player.fastestFreeze,
+        "completions": player.completions
     }
 
     init()
 }
 
+function kindaTrueReset(){
+    clearInterval(gameloop)
+    clearInterval(slowloop)
+
+    player = {
+        'settings': player.settings,
+        'achievements': player.achievements,
+        "completions": player.completions+1
+    }
+
+    localStorage.setItem("gloretime", JSON.stringify(player)); location.reload()
+}
+
 async function mainGameloop(){
     let d = (Date.now() - player.tick)/1000
-    if (d <= 10000){
+    if (d <= 10){
         player.tick = Date.now()
-        offlineStart = 0
-    } else if (offlineStart == 0){
+        offlineStart = -1
+    } else if (offlineStart == -1){
         offlineStart = player.tick
+        offlineD = (Date.now() - player.tick)/1000
     }
 
     slowdown = (((player.time+1)/31557600000000000)**6)
 
-    if (d > 10000){
-        console.log("offline calc")
-        d = 10000
-        player.tick += d
+    if (offlineStart != -1){
+        d = offlineD/1000
+        player.tick += d*1000
 
+        if (offlineD/1000 < 10){
+            document.querySelector(".offlineRate").textContent = Math.round(offlineD/10)/100 + "s"
+        } else {
+            document.querySelector(".offlineRate").textContent = timeify(offlineD/1000)
+        }
         document.querySelector(".offlineZone").style.display = "block"
         document.querySelector(".offlineTime").textContent = timeify((Date.now() - player.tick)/1000)
         document.querySelector(".offlinebar").max = Date.now() - offlineStart
@@ -414,6 +413,11 @@ async function mainGameloop(){
     player.cogs[1].count += (player.cogs[2].count*player.cogs[2].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
     player.cogs[0].count += (player.cogs[1].count*player.cogs[1].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
     player.speed += (player.cogs[0].count*player.cogs[0].mult)*(d/10)*(1+Math.cbrt(player.bigFreeze))
+    if (!isFinite(player.time) || isNaN(player.time)){
+        document.body.innerHTML = `<br><br><br><br><h1>Time has shattered</h1><h2>This is the end...</h2><br><small>The game is literally broken beyond this point lol</small><br><br><button onclick="kindaTrueReset()"><h1>NEAR TRUE RESET</h1></button><small>You will gain 1 game completion</small>`
+        clearInterval(gameloop); clearInterval(slowloop)
+        return
+    }
 
     if (Math.floor(player.time/(31557600000000000/2)) > 1 && player.fastestFreeze < 90000){
         player.time += (player.speed*d)/slowdown
@@ -452,17 +456,20 @@ async function mainGameloop(){
         document.querySelector(".eonPrestige").innerHTML = `<h1>BIG FREEZE</h1><h2>Earn <b class="eonReward">${qwertyMult(1)}</b> Eon when you reset.</h2></div>`
         clearInterval(gameloop); clearInterval(slowloop)
 
-        if (player.settings.autoEon || d == 10000){
+        if (player.settings.autoEon){
             prestige(1)
         }
 
         return
     }
-
-    localStorage.setItem("gloretime", JSON.stringify(player))
 }
 
 function slowGameloop(){
+    if (!isFinite(player.time) || isNaN(player.time)){
+        clearInterval(slowloop)
+        return
+    }
+
     for (let x = 0; x < player.cogs.length; x++){
         if (player.cogs[x].count < 1000){
             document.querySelector(".cog" + (x+1) + "count").textContent = Math.floor(player.cogs[x].count) + "x" + Math.floor((player.cogs[x].mult*(1+Math.cbrt(player.bigFreeze)))*100)/100
@@ -471,13 +478,13 @@ function slowGameloop(){
         }
         //document.querySelector(".cog" + (x+1) + "count").textContent = Math.floor(player.cogs[x].count) + "x" + Math.floor((player.cogs[x].mult*(1+Math.cbrt(player.bigFreeze)))*100)/100
         if (!player.settings.format){
-            if (player.cogs[x].cost == 1e100){
+            if (player.cogs[x].cost >= 1e100){
                 document.querySelector(".cog" + (x+1) + "cost").textContent = "Max"
             } else {
                 document.querySelector(".cog" + (x+1) + "cost").textContent = timeify(player.cogs[x].cost)
             }
         } else {
-            if (player.cogs[x].cost == 1e100){
+            if (player.cogs[x].cost >= 1e100){
                 document.querySelector(".cog" + (x+1) + "cost").textContent = "Max"
             } else {
                 document.querySelector(".cog" + (x+1) + "cost").textContent = timeify_old(player.cogs[x].cost)
@@ -493,14 +500,14 @@ function slowGameloop(){
         document.querySelector(".auto" + (x+1)).textContent = ["False", "True"][player.auto[x].unlocked+0]
         document.querySelector(".auto" + (x+1) + "unlock").textContent = ["Purchase", "Toggle"][player.auto[x].unlocked+0]
 
-        if (player.auto[x].cost == 0){
+        if (player.auto[x].unlocked){
             document.querySelector(".auto" + (x+1) + "cost").textContent = "Unlocked"
         }
 
         document.querySelector(".upgrade" + (x+1)).textContent = ["False", "True"][player.upgrade[x].unlocked+0]
-        document.querySelector(".upgrade" + (x+1) + "unlock").textContent = ["Purchase", "Purchased"][player.upgrade[x].unlocked+0]
+        document.querySelector(".upgrade" + (x+1) + "unlock").textContent = ["Purchase", "Purchased"][(player.upgrade[x].cost==0)+0]
 
-        if (player.upgrade[x].cost == 0){
+        if (player.upgrade[x].unlocked){
             document.querySelector(".upgrade" + (x+1) + "cost").textContent = "Unlocked"
         }
     }
@@ -520,36 +527,18 @@ function slowGameloop(){
     document.querySelector(".rend").textContent = ["OPACITY", "BLUR"][player.settings.renderer+0]
     document.querySelector(".form").textContent = ["NEW", "OLD"][player.settings.format+0]
 
-    try {
-        if (player.bigFreeze != 0){
-            document.querySelector(".AC78933").textContent = "Achieved"
-            
-            if (!NGIO.getMedal(78933).unlocked){
-                NGIO.unlockMedal(78933, onMedalUnlocked)
-            }
-        }
-        if (player.auto.reduce((partialSum, a) => partialSum + a.cost, 0) == 0){
-            document.querySelector(".AC78994").textContent = "Achieved"
-            
-            if (!NGIO.getMedal(78994).unlocked){
-                NGIO.unlockMedal(78994, onMedalUnlocked)
-            }
-        }
-        if (player.fastestFreeze < 90000){
-            document.querySelector(".AC78934").textContent = "Achieved"
+    if (player.completions != 0){
+        document.querySelector(".wins").style.display = "block"
+        document.querySelector(".shatter").textContent = player.completions
+    }
 
-            if (!NGIO.getMedal(78934).unlocked){
-                NGIO.unlockMedal(78934, onMedalUnlocked)
-            }
-        }
-        if (player.upgrade[8].level == player.upgrade[8].cost.length-1){
-            document.querySelector(".AC78995").textContent = "Achieved"
+    unlockMedal(78933, player.bigFreeze != 0)
+    unlockMedal(78994, player.auto.reduce((partialSum, a) => partialSum + a.cost, 0) == 0)
+    unlockMedal(78934, player.fastestFreeze < 90000)
+    unlockMedal(78995, player.upgrade[8].level == 9)
+    unlockMedal(87001, player.completions != 0)
 
-            if (!NGIO.getMedal(78995).unlocked){
-                NGIO.unlockMedal(78995, onMedalUnlocked)
-            }
-        }
-    } catch {}
+    localStorage.setItem("gloretime", JSON.stringify(player))
 }
 
 init()
